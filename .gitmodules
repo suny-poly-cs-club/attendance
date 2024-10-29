@@ -1,0 +1,8 @@
+[submodule "backend"]
+	path = backend
+	url = git@github.com:suny-poly-cs-club/attendance-app-backend.git
+	branch = main
+[submodule "website"]
+	path = website
+	url = git@github.com:suny-poly-cs-club/attendance-app-web-panel.git
+	branch = main
