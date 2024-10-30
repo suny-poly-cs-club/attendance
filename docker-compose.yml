@@ -1,0 +1,127 @@
+services:
+  traefik:
+    image: traefik
+    restart: always
+    ports:
+      - 80:80
+      - 443:443
+    env_file:
+      - .env
+    command:
+      - --api.dashboard=true
+      - --api.insecure=true
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+
+      - --entryPoints.http.address=:80
+      - --entryPoints.https.address=:443
+
+      #### ACME ####
+
+      - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL?Missing ACME_EMAIL}
+      - --certificatesresolvers.letsencrypt.acme.storage=/acme_data/acme.json
+
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge=${ACME_HTTP_CHALLENGE:-true}
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=http
+
+    volumes:
+       - /var/run/docker.sock:/var/run/docker.sock:ro
+       - acme_data:/acme_data
+
+  backend:
+    image: ghcr.io/suny-poly-cs-club/attendance-app-backend
+    restart: always
+    env_file:
+      - .env
+    depends_on:
+      traefik:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB?}
+      POSTGRES_USER: ${POSTGRES_USER?}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD?}
+      POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      PORT: 80
+      QR_BASE_URL: https://${APP_HOST?}
+
+    labels:
+      traefik.enable: true
+
+      traefik.http.middlewares.http-redirect.redirectscheme.scheme: https
+      traefik.http.middlewares.http-redirect.redirectscheme.port: 443
+      traefik.http.middlewares.strip-api.stripprefix.prefixes: /api
+
+      traefik.http.routers.backend-http.rule: Host(`${APP_HOST?}`) && PathPrefix(`/api`)
+      traefik.http.routers.backend-http.middlewares: strip-api, http-redirect
+      traefik.http.routers.backend-http.entrypoints: http
+      traefik.http.routers.backend-http.service: noop@internal
+
+      traefik.http.routers.backend-https.rule: Host(`${APP_HOST?}`) && PathPrefix(`/api`)
+      traefik.http.routers.backend-https.middlewares: strip-api
+      traefik.http.routers.backend-https.entrypoints: https
+      traefik.http.routers.backend-https.tls.certresolver: letsencrypt
+
+      traefik.http.routers.backend-https.service: backend-http
+      traefik.http.services.backend-http.loadbalancer.server.port: 80
+
+  frontend:
+    image: ghcr.io/suny-poly-cs-club/attendance-app-web-panel
+    restart: always
+    depends_on:
+      - backend
+      - traefik
+    env_file:
+      - .env
+    labels:
+      traefik.enable: true
+
+      traefik.http.routers.frontend-http.rule: Host(`${APP_HOST?}`)
+      traefik.http.routers.frontend-http.middlewares: http-redirect
+      traefik.http.routers.frontend-http.entrypoints: http
+      traefik.http.routers.frontend-http.service: noop@internal
+
+      traefik.http.routers.frontend-https.rule: Host(`${APP_HOST?}`)
+      traefik.http.routers.frontend-https.entrypoints: https
+      traefik.http.routers.frontend-https.tls.certresolver: letsencrypt
+
+      traefik.http.routers.frontend-https.service: frontend-http
+      traefik.http.services.frontend-http.loadbalancer.server.port: 80
+
+  migrate:
+    image: ghcr.io/suny-poly-cs-club/attendance-app-backend-migrate
+    command: up
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER?}:${POSTGRES_PASSWORD?}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB?}?sslmode=disable
+      DBMATE_WAIT: true
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16
+    restart: always
+    environment:
+      TZ: America/New_York
+      PGTZ: America/New_York
+      PGUSER: ${POSTGRES_USER?}
+      PGPASSWORD: ${POSTGRES_PASSWORD?}
+    env_file:
+      - .env
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready', '${POSTGRES_DB}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  acme_data:

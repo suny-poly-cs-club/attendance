@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+email=$1
+echo $email
+
+if [[ $# == 0 ]] ; then
+  echo "Usage: promote <email>"
+  exit 0
+fi
+
+if [[ ! "$email" =~ .+@.*\..+ ]] ; then
+  echo "that doesn't look like a valid email!"
+  exit 1
+fi
+
+./psql "update users set is_admin = true where email = '$email'"

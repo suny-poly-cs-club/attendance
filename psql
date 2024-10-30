@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+
+set -o allexport
+. ./.env
+
+docker compose up -d postgres > /dev/null
+
+if [[ $# == 0 ]]; then
+  docker compose exec -it -e PGPASSWORD="$POSTGRES_PASSWORD" postgres psql -U $POSTGRES_USER $POSTGRES_DB
+else
+  docker compose exec -T -e PGPASSWORD="$POSTGRES_PASSWORD" postgres psql -U $POSTGRES_USER $POSTGRES_DB <<< $@
+fi
