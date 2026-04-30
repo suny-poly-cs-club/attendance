@@ -1,0 +1,54 @@
+services:
+  traefik:
+    ports:
+      - 443:443
+    command:
+      - --api.dashboard=true
+      - --api.insecure=true
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+
+      - --entryPoints.http.address=:80
+      - --entryPoints.https.address=:443
+
+      #### ACME ####
+
+      - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL?Missing ACME_EMAIL}
+      - --certificatesresolvers.letsencrypt.acme.storage=/acme_data/acme.json
+
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge=${ACME_HTTP_CHALLENGE:-true}
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=http
+
+    volumes:
+       - acme_data:/acme_data
+
+  backend:
+    environment:
+      QR_BASE_URL: https://${APP_HOST?}
+
+    labels:
+      traefik.http.middlewares.http-redirect.redirectscheme.scheme: https
+      traefik.http.middlewares.http-redirect.redirectscheme.port: 443
+      traefik.http.routers.backend-http.middlewares: strip-api, http-redirect
+      traefik.http.routers.backend-http.service: noop@internal
+
+      traefik.http.routers.backend-https.rule: Host(`${APP_HOST?}`) && PathPrefix(`/api`)
+      traefik.http.routers.backend-https.middlewares: strip-api
+      traefik.http.routers.backend-https.entrypoints: https
+      traefik.http.routers.backend-https.tls.certresolver: letsencrypt
+
+      traefik.http.routers.backend-https.service: backend-http
+
+  frontend:
+    labels:
+      traefik.http.routers.frontend-http.middlewares: http-redirect
+      traefik.http.routers.frontend-http.service: noop@internal
+
+      traefik.http.routers.frontend-https.rule: Host(`${APP_HOST?}`)
+      traefik.http.routers.frontend-https.entrypoints: https
+      traefik.http.routers.frontend-https.tls.certresolver: letsencrypt
+
+      traefik.http.routers.frontend-https.service: frontend-http
+
+volumes:
+  acme_data:
