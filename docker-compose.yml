@@ -2,6 +2,7 @@ services:
   traefik:
     image: traefik
     restart: always
+    pull_policy: always
     ports:
       - 80:80
     env_file:
@@ -20,6 +21,7 @@ services:
   backend:
     image: ghcr.io/suny-poly-cs-club/attendance-app-backend
     restart: always
+    pull_policy: always
     env_file:
       - .env
     depends_on:
@@ -53,6 +55,7 @@ services:
   frontend:
     image: ghcr.io/suny-poly-cs-club/attendance-app-web-panel
     restart: always
+    pull_policy: always
     depends_on:
       - backend
       - traefik
@@ -70,6 +73,7 @@ services:
   migrate:
     image: ghcr.io/suny-poly-cs-club/attendance-app-backend-migrate
     command: up
+    pull_policy: always
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER?}:${POSTGRES_PASSWORD?}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB?}?sslmode=disable
       DBMATE_WAIT: true
@@ -96,6 +100,15 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  watchtower:
+    image: containrrr/watchtower
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      WATCHTOWER_CLEANUP: 'true'
+      WATCHTOWER_POLL_INTERVAL: 86400 # Check every 24 hours
 
 volumes:
   postgres_data:
