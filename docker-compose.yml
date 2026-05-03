@@ -39,6 +39,7 @@ services:
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}
       PORT: 80
       QR_BASE_URL: http://${APP_HOST?}
+      MESSAGE: ${MESSAGE}
 
     labels:
       traefik.enable: true
